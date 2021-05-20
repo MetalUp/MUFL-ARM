@@ -1,29 +1,30 @@
-//Tokenizer
 //Test code
-//Constants
       MOV R0, #source
 main: STR R0, .ReadString
-      MOV R1, #0
+      MOV R1, #tokenList
       PUSH {R0}
       BL tokenizer
       MOV R2, R0
       POP {R0}
       CMP R2, #0
       BEQ main
-//Handle parse error
-      STR R0, .WriteString //Echo back
+//    Handle parse error
+      STR R0, .WriteString //Echo back the source
       MOV R2, #10       //newline
-      STRB R2, .WriteChar
+      STRB R2, .WriteChar 
       MOV R2, #32       //Space
-      STRB R2, .WriteChar
+      STRB R2, .WriteChar //Write number of spaces to match current character pointer in R2
       SUBS R1, R1, #1
       BGT .-2
       MOV R2, #parseErrorMsg
       STR R2, .WriteString
       B main
 // tokenizer: Parse input string and generate a list of tokens
-// Input params: R0 has address of a zero-terminated string of source expression;
-// Returned results: R0 has result code. Anything non-zero indicates error. R1 will have the character number where the error was detected.
+// Input parameters: R0 has address of a zero-terminated string of source expression;
+//                   R1 has start address where tokens are to be stored
+// Returned values: R0 has result code. Anything non-zero indicates error. 
+//                  R1 will have the character number where the error was detected.
+//                  
 //R0: Start of expression
 //R1: Index
 //R2: Temp
@@ -37,9 +38,9 @@ parseErrorMsg: .ASCIZ "^ Parse error!"
 comma: .WORD 0x2000002C
 tokenizer: 
       PUSH {R4-R8,LR}
+      MOV R4, R1
       MOV R1, #0
       MOV R3, #0
-      MOV R4, #tokenlist
 //Get next char
 loop1: LDRB R2, [R0 + R1]
 //Test for end of line
@@ -147,4 +148,4 @@ readInteger: PUSH {R4-R8} //Save variable registers used locally
       .ALIGN 256
       .DATA
 source: .BLOCK 256      //256 chars
-tokenlist: .BLOCK 512   //128 words
+tokenList: .BLOCK 512   //128 words
