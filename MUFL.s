@@ -1,5 +1,5 @@
-RunTests:      B Test0
-ExecuteBasicFunction: // Given func token in R0, and params set up in R4+, returns result in R0
+RunTests: B Test0
+ExecuteBasicFunction:   // Given func token in R0, and params set up in R4+, returns result in R0
       AND R1, R0, #0x0F000000
       LSR R1, R1, #24   //R1 now holds num params
       MOV R2, #0xFFFF   //Mask for address 
@@ -96,6 +96,7 @@ Ne:
       MOV R0, #0
       RET
 // TESTS
+      .Align 1024
 Test0:                  //Tests the test method only
       MOV R0, #7
       MOV R1, #7
@@ -211,12 +212,12 @@ AssertAreEqual:         // Compares R0 (actual) with R1 (expected). Returns if e
       STR R3, .WriteString
       STR R0,. WriteUnsignedNum
       HLT
-testFailedMsg: .ASCIZ "Failed #"
-testExpectedMsg: .ASCIZ "Expected:"
-testActualMsg: .ASCIZ "Actual:"
 AllTestsPassed:         // Writes message to console and halts
       MOV R0, #testPassedMsg
       STR R0, .WriteString
       STR R2, .WriteUnsignedNum
       HLT
+testFailedMsg: .ASCIZ "Failed #"
+testExpectedMsg: .ASCIZ "Expected:"
+testActualMsg: .ASCIZ "Actual:"
 testPassedMsg: .ASCIZ "Passed tests: "
