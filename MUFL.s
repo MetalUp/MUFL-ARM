@@ -1,4 +1,19 @@
 RunTests: B Test0
+GetFunctionToken:       // In: R0 function name (up to 4 chars). Out: R0 has func token or -1 if not found.
+      MOV R1, #Add
+      LDR R2, [R1]
+      CMP R2, #0        //End of functions indicator
+      BEQ .+9           //Not Found
+      CMP R0,R2
+      BEQ .+4           //Found
+      ADD R1, R1, #4    //Advance 1 word
+      LDR R1, [R1]      //Get next addr
+      B .-7             //Repeat search
+      ADD R1, R1, #8    //Found: Advance two words
+      LDR R0, [R1]      //Get token
+      RET
+      MVN R0, #0        //Not Found: return -1
+      RET
 ExecuteBasicFunction:   // Given func token in R0, and params set up in R4+, returns result in R0
       AND R1, R0, #0x0F000000
       LSR R1, R1, #24   //R1 now holds num params
@@ -9,8 +24,8 @@ ExecuteBasicFunction:   // Given func token in R0, and params set up in R4+, ret
       MOV PC, R2
       POP {LR}
       RET
-Functions:
       .Align 1024
+//Basic Functions
 Add:
       .Word 0x0000002b  // Name: '+'
       .Word 0x414       // Link
@@ -95,7 +110,7 @@ Ne:
       BNE .+2
       MOV R0, #0
       RET
-// TESTS
+//TESTS
       .Align 1024
 Test0:                  //Tests the test method only
       MOV R0, #7
@@ -196,6 +211,36 @@ Test12:                 // Ne
       BL ExecuteBasicFunction
       MOV R1, #0
       MOV R2, #12       //Test number
+      BL AssertAreEqual
+Test13:                 // Get function token by function name, starting with +
+      MOV R0, #0x2b     //+
+      BL GetFunctionToken
+      MOV R1, #Add      //because it is the first function
+      ADD R1, R1, #8
+      LDR R1, [R1]
+      MOV R2, #13       //Test number
+      BL AssertAreEqual
+Test14:                 //Or
+      MOV R0, #0x4F72   //Or
+      BL GetFunctionToken
+      MOV R1, #Or
+      ADD R1, R1, #8
+      LDR R1, [R1]
+      MOV R2, #14       //Test number
+      BL AssertAreEqual
+Test15:                 // Ne
+      MOV R0, #0x213d   //Ne
+      BL GetFunctionToken
+      MOV R1, #Ne
+      ADD R1, R1, #8
+      LDR R1, [R1]
+      MOV R2, #15       //Test number
+      BL AssertAreEqual
+Test16:                 // Non-existant function Foo
+      MOV R0, #0x466f6f //Foo
+      BL GetFunctionToken
+      MVN R1, #0        //-1
+      MOV R2, #16       //Test number
       BL AssertAreEqual
       B AllTestsPassed
 AssertAreEqual:         // Compares R0 (actual) with R1 (expected). Returns if equal, otherwise halts with console message indicating test number (R2). 
