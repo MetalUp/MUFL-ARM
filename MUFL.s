@@ -1,4 +1,52 @@
 RunTests: B Test0
+EvaluateExpression:     //In: R1 Token ptr Out: R0 result, R1 token ptr updated
+      PUSH {LR}
+      LDR R0, [R1]
+      ADD R1, R1, #4    //Increment token pointer TODO: here or later?
+      CMP R0, #0
+      BLT .+2           //Indicates that token is not a number
+      B end_EvaluateExpression 
+      AND R2, R0, #0xF0000000 //Mask for token type
+      CMP R2, #0xE0000000 //Test for function (0xE.. basic function, 0xF.. UDF)
+      BLT .+3
+      BL EvaluateParamsAndExecuteFunction
+      B end_EvaluateExpression 
+      MOV R12, #1       //Error No.
+end_EvaluateExpression: 
+      POP {LR}
+      RET
+EvaluateParamsAndExecuteFunction: //In: R0 function token, R1 Next token ptr Out: R0 result, R1 Updated next token ptr
+      PUSH {LR, R4-R11}
+      AND R2, R0, #0x0f000000 //Mask for num params
+      LSR R2, R2, #22   //R2 now holds num params (0 - 4) x 4
+      MOV R3, #0
+      CMP R3, R2        //StartOfLoop for each parameter
+      BEQ .+9           //To: AllParamsProcessed
+      PUSH {R0}
+      BL EvaluateExpression //Result is in R0, R1 us updated
+      PUSH {R8-R11}     //Transfer R0 to the appropriate parameter-holding-pen register (R8-R11)
+      STR R0, [SP + R3]
+      POP {R8-R11}
+      POP {R0}
+      ADD R3, R3, #4    //Next param
+      B .-9             //To StartOfLoop   
+      MOV R4, R8        //AllParamsProcessed:  Transfer R8-R11 to R4-R7
+      MOV R5, R9        //Note reversal of order because R2 will be counting down.
+      MOV R6, R10
+      MOV R7, R11
+      BL ExecuteBasicFunction //TODO: different call for UDF
+      POP {LR, R4-R11}
+      RET               //Result in R0
+ErrorHandler:           // In: R0 Error number
+      PUSH {R12}
+      LSL R12, R12, #2  // x 4
+      ADD R12, R12, #4  //Offset to start of error message pointers
+      LDR R12, [PC + R12]
+      STR R12, .WriteString
+      POP {R12}
+      RET
+      .Word error1      //Each error message must be added here
+error1: .ASCIZ "Error Type 1"
 GetFunctionToken:       // In: R0 function name (up to 4 chars). Out: R0 has func token or -1 if not found.
       MOV R1, #Add
       LDR R2, [R1]
@@ -15,11 +63,9 @@ GetFunctionToken:       // In: R0 function name (up to 4 chars). Out: R0 has fun
       MVN R0, #0        //Not Found: return -1
       RET
 ExecuteBasicFunction:   // Given func token in R0, and params set up in R4+, returns result in R0
-      AND R1, R0, #0x0F000000
-      LSR R1, R1, #24   //R1 now holds num params
+      PUSH {LR}
       MOV R2, #0xFFFF   //Mask for address 
       AND R2, R0,R2     //R2 holds address of function impl
-      PUSH {LR}
       MOV LR, PC        //Set up computer branch to R2
       MOV PC, R2
       POP {LR}
@@ -29,55 +75,55 @@ ExecuteBasicFunction:   // Given func token in R0, and params set up in R4+, ret
 Add:
       .Word 0x0000002b  // Name: '+'
       .Word 0x414       // Link
-      .Word 0xB200040c  // Token
+      .Word 0xE200040c  // Token
       ADD R0,R4,R5      // Compiled impl
       RET
 Sub:
       .Word 0x0000002d  // Name: '-'
       .Word 0x428       // Link
-      .Word 0xB2000420  // Token
+      .Word 0xE2000420  // Token
       SUB R0,R4,R5      // Compiled impl
       RET
 And:
       .Word 0x00000026  // Name: '&'
       .Word 0x43c       // Link
-      .Word 0xB2000434  // Token
+      .Word 0xE2000434  // Token
       AND R0,R4,R5      // Compiled impl
       RET
 Or:
       .Word 0x00004F72  // Name: 'Or'
       .Word 0x450       // Link
-      .Word 0xB2000448  // Token
+      .Word 0xE2000448  // Token
       ORR R0,R4,R5      // Compiled impl
       RET
 Xor:
       .Word 0x00586F72  // Name: 'Xor'
       .Word 0x464       // Link
-      .Word 0xB200045c  // Token
+      .Word 0xE200045c  // Token
       XOR R0,R4,R5      // Compiled impl
       RET
 Not:
       .Word 0x00000021  // Name: '!'
       .Word 0x478       // Link or zero for end
-      .Word 0xB2000470  // Token
+      .Word 0xE2000470  // Token
       MVN R0,R4         // Compiled impl
       RET
 Lsl:
       .Word 0x00003c3c  // Name: '<<'
       .Word 0x48c       // Link or zero for end
-      .Word 0xB2000484  // Token
+      .Word 0xE2000484  // Token
       LSL R0,R4,R5      // Compiled impl
       RET
 Lsr:
       .Word 0x00003e3e  // Name: '>>'
       .Word 0x4a0       // Link or zero for end
-      .Word 0xB2000498  // Token
+      .Word 0xE2000498  // Token
       LSR R0,R4,R5      // Compiled impl
       RET
 Gt:
       .Word 0x0000003e  // Name: '>'
       .Word 0x4c0       // Link or zero for end
-      .Word 0xB20004ac  // Token
+      .Word 0xE20004ac  // Token
       MOV R0, #1        // Compiled impl
       CMP R4,R5
       BGT .+2
@@ -86,7 +132,7 @@ Gt:
 Lt:
       .Word 0x0000003c  // Name: '<'
       .Word 0x4e0       // Link or zero for end
-      .Word 0xB20004cc  // Token
+      .Word 0xE20004cc  // Token
       MOV R0, #1        // Compiled impl
       CMP R4,R5
       BLT .+2
@@ -95,7 +141,7 @@ Lt:
 Eq:
       .Word 0x00003d3d  // Name: '=='
       .Word 0x500       // Link or zero for end
-      .Word 0xB20004ec  // Token
+      .Word 0xE20004ec  // Token
       MOV R0, #1        // Compiled impl
       CMP R4,R5
       BEQ .+2
@@ -104,7 +150,7 @@ Eq:
 Ne:
       .Word 0x0000213d  // Name: '!='
       .Word 0x520       // Link or zero for end
-      .Word 0xB200050c  // Token
+      .Word 0xE200050c  // Token
       MOV R0, #1        // Compiled impl
       CMP R4,R5
       BNE .+2
@@ -241,6 +287,35 @@ Test16:                 // Non-existant function Foo
       BL GetFunctionToken
       MVN R1, #0        //-1
       MOV R2, #16       //Test number
+      BL AssertAreEqual
+//Expression evaluation
+Test17:
+      B .+2
+      .Word 7           // Literal value
+      SUB R1, PC, #12
+      BL EvaluateExpression
+      MOV R1, #7        //Expected
+      MOV R2, #17       //Test number
+      BL AssertAreEqual
+Test18: 
+      B .+2
+      .Word 0xD000002b  // Invalid token
+      SUB R1, PC, #12
+      BL EvaluateExpression
+      MOV R0, R12       //Test the error message No.
+      MOV R1, #1        //Expected
+      MOV R12, #0       //Reset error flag
+      MOV R2, #18       //Test number
+      BL AssertAreEqual
+Test19:
+      B .+4
+      .Word 0xE200040c  // Function '+'
+      .Word 5
+      .Word 6
+      SUB R1, PC, #20
+      BL EvaluateExpression
+      MOV R1, #11       //Expected error message
+      MOV R2, #19       //Test number 3
       BL AssertAreEqual
       B AllTestsPassed
 AssertAreEqual:         // Compares R0 (actual) with R1 (expected). Returns if equal, otherwise halts with console message indicating test number (R2). 

@@ -56,7 +56,7 @@ found: ADD R1, R1, #8   //Advance two words
       RET
 notFound: MVN R0, #0    //-1
       RET
-      3
+
       .Align 1024
 Functions:
       .data
