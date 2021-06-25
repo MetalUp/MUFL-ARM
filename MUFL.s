@@ -210,9 +210,9 @@ Ne:
       MOV R0, #0
       RET
 //TEST ready-tokenized user functions
-//Example UDFs ready-tokenized
+//Sum3
       .Word 0x53756d33  // Name: 'Sum3'
-      .Word 0           // Link TODO
+      .Word 0x55c       // Link TODO
       .Word 0xF300052c  // Token
       .Word 0xE200040c  // +
       .Word 0xE200040c  // +
@@ -220,7 +220,20 @@ Ne:
       .Word 0xA0000001  // Var 1
       .Word 0xA0000002  // Var 2
       .ASCIZ "Sum3(a,b,c) : +(+(a,b),c)" // Source
+//Max
+      .Word 0x004d6178  // Name: 'Max'
+      .Word 0           // Link TODO
+      .Word 0xF2000568  // Token
+      .Word 0xC0000000  // If
+      .Word 0xE20004ac  // Gt
+      .Word 0xA0000000  // Var 0
+      .Word 0xA0000001  // Var 1
+      .Word 0xA0000000  // Var 0
+      .Word 0xC1000000  // else
+      .Word 0xA0000001  // Var 1
+      .ASCIZ "Max(a,b) : if >(a,b) then a else b" // Source
 //TESTS
+      .Word 0
       .Align 1024
 Test0:                  //Tests the test method only
       MOV R0, #7
@@ -443,6 +456,26 @@ Test24:                 //Conditional expression
       MOV R1, #19       //Expected
       MOV R2, #24       //Test number
       BL AssertAreEqual 
+Test25:                 //Max
+      B .+4
+      .Word 0xF2000568   //Max
+      .Word 3   //3
+      .Word 4  //4
+      SUB R1, PC, #20   // NumWords x 4 + 8
+      BL EvaluateExpression
+      MOV R1, #4       //Expected
+      MOV R2, #25       //Test number
+      BL AssertAreEqual
+Test26:                 //Max
+      B .+4
+      .Word 0xF2000568   //Max
+      .Word 5  
+      .Word 4  
+      SUB R1, PC, #20   // NumWords x 4 + 8
+      BL EvaluateExpression
+      MOV R1, #5       //Expected
+      MOV R2, #26       //Test number
+      BL AssertAreEqual
       B AllTestsPassed
 ClearRegisters0_12:
       MOV R0, #0
