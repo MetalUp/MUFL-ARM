@@ -1,4 +1,4 @@
-RunTests: B Test0
+RunTests: B Test20
 EvaluateExpression:     //In: R1 Token ptr Out: R0 result, R1 token ptr updated
       PUSH {LR}
       LDR R0, [R1]
@@ -20,16 +20,20 @@ EvaluateParamsAndExecuteFunction: //In: R0 function token, R1 Next token ptr Out
       AND R2, R0, #0x0f000000 //Mask for num params
       LSR R2, R2, #22   //R2 now holds num params (0 - 4) x 4
       MOV R3, #0
+startLoop:
       CMP R3, R2        //StartOfLoop for each parameter
-      BEQ .+9           //To: AllParamsProcessed
+      BEQ allParamsProcessed //To: AllParamsProcessed
       PUSH {R0}
+      PUSH {R2, R3}
       BL EvaluateExpression //Result is in R0, R1 us updated
+      POP {R2, R3}
       PUSH {R8-R11}     //Transfer R0 to the appropriate parameter-holding-pen register (R8-R11)
       STR R0, [SP + R3]
       POP {R8-R11}
       POP {R0}
       ADD R3, R3, #4    //Next param
-      B .-9             //To StartOfLoop   
+      B startLoop       //To StartOfLoop 
+allParamsProcessed: 
       MOV R4, R8        //AllParamsProcessed:  Transfer R8-R11 to R4-R7
       MOV R5, R9        //Note reversal of order because R2 will be counting down.
       MOV R6, R10
@@ -289,17 +293,17 @@ Test16:                 // Non-existant function Foo
       MOV R2, #16       //Test number
       BL AssertAreEqual
 //Expression evaluation
-Test17:
+Test17:                 // '7'
       B .+2
-      .Word 7           // Literal value
+      .Word 7 
       SUB R1, PC, #12
       BL EvaluateExpression
       MOV R1, #7        //Expected
       MOV R2, #17       //Test number
       BL AssertAreEqual
-Test18: 
+Test18:                 // Invalid token
       B .+2
-      .Word 0xD000002b  // Invalid token
+      .Word 0xD000002b 
       SUB R1, PC, #12
       BL EvaluateExpression
       MOV R0, R12       //Test the error message No.
@@ -307,17 +311,59 @@ Test18:
       MOV R12, #0       //Reset error flag
       MOV R2, #18       //Test number
       BL AssertAreEqual
-Test19:
+Test19:                 // '+5 6'
       B .+4
       .Word 0xE200040c  // Function '+'
       .Word 5
       .Word 6
       SUB R1, PC, #20
       BL EvaluateExpression
-      MOV R1, #11       //Expected error message
-      MOV R2, #19       //Test number 3
+      MOV R1, #11       //Expected
+      MOV R2, #19       //Test number
       BL AssertAreEqual
+Test20:                 // Function '+ + 3 4 5'
+      BL ClearRegisters0_12
+      B .+6
+      .Word 0xE200040c  // Function '+'
+      .Word 0xE200040c  // Function '+'
+      .Word 3
+      .Word 4
+      .Word 5
+      SUB R1, PC, #28
+      BL EvaluateExpression
+      MOV R1, #12       //Expected
+      MOV R2, #20       //Test number
+      BL AssertAreEqual 
+Test21:                 // Function '+ << 3 1 << 4 2'
+      B .+7
+      .Word 0xE200040c  // +
+      .Word 0xE2000484  // <<
+      .Word 3
+      .Word 1
+      .Word 0xE2000484  // <<
+      .Word 4
+      .Word 2
+      SUB R1, PC, #36
+      BL EvaluateExpression
+      MOV R1, #22       //Expected
+      MOV R2, #21       //Test number
+      BL AssertAreEqual 
       B AllTestsPassed
+ClearRegisters0_12:
+      MOV R0, #0
+      MOV R1, #0
+      MOV R2, #0
+      MOV R3, #0
+      MOV R4, #0
+      MOV R5, #0
+      MOV R6, #0
+      MOV R7, #0
+      MOV R8, #0
+      MOV R9, #0
+      MOV R10, #0
+      MOV R11, #0
+      MOV R12, #0
+      RET
 AssertAreEqual:         // Compares R0 (actual) with R1 (expected). Returns if equal, otherwise halts with console message indicating test number (R2). 
       CMP R0, R1
       BNE .+2
