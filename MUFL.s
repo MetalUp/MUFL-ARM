@@ -5,8 +5,12 @@ EvaluateExpression:     //In: R1 Token ptr Out: R0 result, R1 token ptr updated
       ADD R1, R1, #4    //Increment token pointer TODO: here or later?
       CMP R0, #0
       BLT .+2           //Indicates that token is not a number
-      B end_EvaluateExpression 
+      B end_EvaluateExpression // Token is the result
       AND R2, R0, #0xF0000000 //Mask for token type
+      CMP R2, #0xA0000000 //Test for variable
+      BNE .+3           //Next case
+      BL GetVariableValue
+      B end_EvaluateExpression 
       CMP R2, #0xE0000000 //Test for function (0xE.. basic function, 0xF.. UDF)
       BLT .+3
       BL EvaluateParamsAndExecuteFunction
@@ -14,6 +18,13 @@ EvaluateExpression:     //In: R1 Token ptr Out: R0 result, R1 token ptr updated
       MOV R12, #1       //Error No.
 end_EvaluateExpression: 
       POP {LR}
+      RET
+GetVariableValue:       //In: R0 token Out: R0 has variable value
+      AND R3, R0, #03   //Lowest 2 bits
+      LSL R3, R3, #2    // x4 for word address
+      PUSH {R4-R7}
+      LDR R0, [SP + R3]
+      POP {R4-R7}
       RET
 EvaluateParamsAndExecuteFunction: //In: R0 function token, R1 Next token ptr Out: R0 result, R1 Updated next token ptr
       PUSH {LR, R4-R11}
@@ -38,6 +49,12 @@ allParamsProcessed:
       MOV R5, R9        //Note reversal of order because R2 will be counting down.
       MOV R6, R10
       MOV R7, R11
+      MOV R2, #0xFFFF   //Mask for address 
+      AND R2, R0,R2     //R2 holds address of function impl
+      CMP R0, #0xF0000000 //Test for User or Basic function
+      BLT .+3
+      BL ExecuteUserFunction
+      B .+2
       BL ExecuteBasicFunction //TODO: different call for UDF
       POP {LR, R4-R11}
       RET               //Result in R0
@@ -66,13 +83,17 @@ GetFunctionToken:       // In: R0 function name (up to 4 chars). Out: R0 has fun
       RET
       MVN R0, #0        //Not Found: return -1
       RET
-ExecuteBasicFunction:   // Given func token in R0, and params set up in R4+, returns result in R0
+ExecuteBasicFunction:   // Given func token in R0, R2 address of function, R4+ params, returns result in R0
       PUSH {LR}
-      MOV R2, #0xFFFF   //Mask for address 
-      AND R2, R0,R2     //R2 holds address of function impl
       MOV LR, PC        //Set up computer branch to R2
-      MOV PC, R2
+      MOV PC, R2        //BL to impl
       POP {LR}
+      RET
+ExecuteUserFunction:    // Given func token in R0, R2 address of function, R4+ params, returns result in R0
+      PUSH {LR, R1}
+      MOV R1, R2        //Set next token pointer to start of function impl
+      BL EvaluateExpression
+      POP {LR, R1}
       RET
       .Align 1024
 //Basic Functions
@@ -160,6 +181,17 @@ Ne:
       BNE .+2
       MOV R0, #0
       RET
+//TEST ready-tokenized user functions
+//Example UDFs ready-tokenized
+      .Word 0x53756d33  // Name: 'Sum3'
+      .Word 0           // Link TODO
+      .Word 0xF300052c  // Token
+      .Word 0xE200040c  // +
+      .Word 0xE200040c  // +
+      .Word 0xA0000000  // Var 0
+      .Word 0xA0000001  // Var 1
+      .Word 0xA0000002  // Var 2
+      .ASCIZ "Sum3(a,b,c) : +(+(a,b),c)" // Source
 //TESTS
       .Align 1024
 Test0:                  //Tests the test method only
@@ -347,6 +379,17 @@ Test21:                 // Function '+ << 3 1 << 4 2'
       BL EvaluateExpression
       MOV R1, #22       //Expected
       MOV R2, #21       //Test number
+      BL AssertAreEqual 
+Test22:                 // Use UDF
+      B .+5
+      .Word 0xF300052c  //Sum3
+      .Word 7
+      .Word 8
+      .Word 9
+      SUB R1, PC, #24   //R1 points to first token
+      BL EvaluateExpression
+      MOV R1, #24       //Expected
+      MOV R2, #22       //Test number
       BL AssertAreEqual 
       B AllTestsPassed
 ClearRegisters0_12:
