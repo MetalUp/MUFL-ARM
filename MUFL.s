@@ -3,15 +3,19 @@ EvaluateExpression:     //In: R1 Token ptr Out: R0 result, R1 token ptr updated
       PUSH {LR}
       LDR R0, [R1]
       ADD R1, R1, #4    //Increment token pointer TODO: here or later?
-      CMP R0, #0
+      CMP R0, #0        // Case 1:  Literal value
       BLT .+2           //Indicates that token is not a number
       B end_EvaluateExpression // Token is the result
       AND R2, R0, #0xF0000000 //Mask for token type
-      CMP R2, #0xA0000000 //Test for variable
+      CMP R2, #0xA0000000 //Case 2: Variable
       BNE .+3           //Next case
       BL GetVariableValue
       B end_EvaluateExpression 
-      CMP R2, #0xE0000000 //Test for function (0xE.. basic function, 0xF.. UDF)
+      CMP R2, #0xC0000000 //Case 3: Conditional expression
+      BNE .+3           //Case 4
+      BL ConditionalExpression
+      B end_EvaluateExpression 
+      CMP R2, #0xE0000000 // Case 4: Function
       BLT .+3
       BL EvaluateParamsAndExecuteFunction
       B end_EvaluateExpression 
@@ -25,6 +29,30 @@ GetVariableValue:       //In: R0 token Out: R0 has variable value
       PUSH {R4-R7}
       LDR R0, [SP + R3]
       POP {R4-R7}
+      RET
+ConditionalExpression:
+      PUSH {LR}
+      BL EvaluateExpression
+      CMP R0, #0
+      BNE condition_EvalNext 
+conditionFails:
+      ADD R1, R1, #4    //Next token
+      MOV R3, #1        //Ifs not matched by Elses
+      LDR R0, [R1]
+      CMP R0,#0xC1000000 //Else
+      BNE .+3           //i.e. next test
+      SUB R3, R3, #1
+      CMP R3, #0        //If true, we are on the right else
+      BNE .+3           // continue
+      ADD R1, R1, #4    //Next token
+      B condition_EvalNext
+      CMP R1, #0xC0000000 //If
+      BNE conditionFails //i.e. next token
+      ADD R3, R3, #1
+      B conditionFails  //Try next token
+condition_EvalNext:
+      BL EvaluateExpression
+      POP {LR}
       RET
 EvaluateParamsAndExecuteFunction: //In: R0 function token, R1 Next token ptr Out: R0 result, R1 Updated next token ptr
       PUSH {LR, R4-R11}
@@ -336,7 +364,7 @@ Test17:                 // '7'
 Test18:                 // Invalid token
       B .+2
       .Word 0xD000002b 
-      SUB R1, PC, #12
+      SUB R1, PC, #12   // NumWords x 4 + 8
       BL EvaluateExpression
       MOV R0, R12       //Test the error message No.
       MOV R1, #1        //Expected
@@ -348,7 +376,7 @@ Test19:                 // '+5 6'
       .Word 0xE200040c  // Function '+'
       .Word 5
       .Word 6
-      SUB R1, PC, #20
+      SUB R1, PC, #20   // NumWords x 4 + 8
       BL EvaluateExpression
       MOV R1, #11       //Expected
       MOV R2, #19       //Test number
@@ -361,7 +389,7 @@ Test20:                 // Function '+ + 3 4 5'
       .Word 3
       .Word 4
       .Word 5
-      SUB R1, PC, #28
+      SUB R1, PC, #28   // NumWords x 4 + 8
       BL EvaluateExpression
       MOV R1, #12       //Expected
       MOV R2, #20       //Test number
@@ -375,7 +403,7 @@ Test21:                 // Function '+ << 3 1 << 4 2'
       .Word 0xE2000484  // <<
       .Word 4
       .Word 2
-      SUB R1, PC, #36
+      SUB R1, PC, #36   // NumWords x 4 + 8
       BL EvaluateExpression
       MOV R1, #22       //Expected
       MOV R2, #21       //Test number
@@ -386,10 +414,34 @@ Test22:                 // Use UDF
       .Word 7
       .Word 8
       .Word 9
-      SUB R1, PC, #24   //R1 points to first token
+      SUB R1, PC, #24   // NumWords x 4 + 8
       BL EvaluateExpression
       MOV R1, #24       //Expected
       MOV R2, #22       //Test number
+      BL AssertAreEqual 
+Test23:                 //Conditional expression
+      B .+6
+      .Word 0xC0000000  //If
+      .Word 1
+      .Word 17
+      .Word 0xC0000000  //Else
+      .Word 19
+      SUB R1, PC, #28   // NumWords x 4 + 8
+      BL EvaluateExpression
+      MOV R1, #17       //Expected
+      MOV R2, #23       //Test number
+      BL AssertAreEqual
+Test24:                 //Conditional expression
+      B .+6
+      .Word 0xC0000000  //If
+      .Word 0
+      .Word 17
+      .Word 0xC1000000  //Else
+      .Word 19
+      SUB R1, PC, #28   // NumWords x 4 + 8
+      BL EvaluateExpression
+      MOV R1, #19       //Expected
+      MOV R2, #24       //Test number
       BL AssertAreEqual 
       B AllTestsPassed
 ClearRegisters0_12:
